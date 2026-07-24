@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from stego.core.steganographer import Steganographer
-from stego.core.types import CapacityInfo, Secret
+from stego.core.types import CapacityInfo, ExtractResult, PackResult, Secret
 
 DEFAULT_ENGINE = "lsb"
 
@@ -18,8 +18,8 @@ def pack(
     output: str | Path,
     method: str = DEFAULT_ENGINE,
     **params,
-) -> None:
-    Steganographer(method).pack(container, secret, output, **params)
+) -> PackResult:
+    return Steganographer(method).pack(container, secret, output, **params)
 
 
 def extract(
@@ -27,5 +27,5 @@ def extract(
     output_dir: str | Path | None = None,
     method: str = DEFAULT_ENGINE,
     **params,
-) -> Secret:
+) -> ExtractResult:
     return Steganographer(method).extract(container, output_dir, **params)

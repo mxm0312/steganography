@@ -1,8 +1,15 @@
-# CUDA-вариант образа для GPU-инференса LF-VSN.
+# CUDA-вариант образа для GPU-инференса нейросетевых движков (LF-VSN, SteganoGAN).
+#
 #   docker build -f Dockerfile.cuda -t stego:cuda .
+#
+#   # UI с GPU (веса монтируются из репозитория):
 #   docker run --rm --gpus all -p 8501:8501 \
-#       -v "$PWD/weights:/app/stego/engines/lfvsn/weights" stego:cuda
+#       -v "$(pwd)/stego/engines/lfvsn/weights:/app/stego/engines/lfvsn/weights" \
+#       -v "$(pwd)/stego/engines/steganogan/weights:/app/stego/engines/steganogan/weights" \
+#       stego:cuda
+#
 # Без --gpus контейнер всё равно запустится и будет считать на CPU (device=auto).
+# Веса (*.pth, *.steg) исключены из образа через .dockerignore — монтируйте в рантайме.
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 # ffmpeg — libav для PyAV; ca-certificates — для скачивания колёс uv

@@ -111,26 +111,44 @@ docker run --rm -v "$PWD:/data" stego stego extract /data/out.mkv -o /data/recov
 docker run --rm -v "$PWD:/data" stego python -c "import stego; print(stego.capacity('/data/in.mp4'))"
 ```
 
-### LF-VSN и GPU в Docker
+### Нейросетевые движки и GPU в Docker
 
-Дефолтный образ — CPU (без torch). Для GPU-инференса собирайте CUDA-вариант и пробрасывайте
-видеокарту флагом `--gpus`, а веса монтируйте в рантайме:
+Дефолтный образ включает torch (CPU). Для GPU-инференса собирайте CUDA-вариант.
+
+Оба нейросетевых движка (**LF-VSN** и **SteganoGAN**) нуждаются в весах, которые исключены
+из образа через `.dockerignore` — их монтируют в рантайме из репозитория:
+
+| Движок     | Путь к весам в репо                          | Монтировать в контейнере                              |
+| :--------- | :------------------------------------------- | :---------------------------------------------------- |
+| LF-VSN     | `stego/engines/lfvsn/weights/*.pth`          | `/app/stego/engines/lfvsn/weights`                    |
+| SteganoGAN | `stego/engines/steganogan/weights/*.steg`    | `/app/stego/engines/steganogan/weights`               |
 
 ```bash
 docker build -f Dockerfile.cuda -t stego:cuda .
 
-# UI с GPU на http://localhost:8501
+# UI с GPU + веса обоих нейросетевых движков
 docker run --rm --gpus all -p 8501:8501 \
-  -v "$PWD/weights:/app/stego/engines/lfvsn/weights" stego:cuda
+  -v "$(pwd)/stego/engines/lfvsn/weights:/app/stego/engines/lfvsn/weights" \
+  -v "$(pwd)/stego/engines/steganogan/weights:/app/stego/engines/steganogan/weights" \
+  stego:cuda
 
-# CLI-упаковка на GPU (веса + данные через volume)
+# CLI — LF-VSN на GPU (данные через /data)
 docker run --rm --gpus all \
-  -v "$PWD/weights:/app/stego/engines/lfvsn/weights" -v "$PWD:/data" \
+  -v "$(pwd)/stego/engines/lfvsn/weights:/app/stego/engines/lfvsn/weights" \
+  -v "$(pwd):/data" \
   stego:cuda stego --method lfvsn --device cuda pack /data/cover.mkv /data/secret.mkv -o /data/stego.mkv
+
+# CLI — SteganoGAN на GPU
+docker run --rm --gpus all \
+  -v "$(pwd)/stego/engines/steganogan/weights:/app/stego/engines/steganogan/weights" \
+  -v "$(pwd):/data" \
+  stego:cuda stego --method steganogan --device cuda pack /data/cover.png /data/secret.txt -o /data/stego.png
 ```
 
 Без `--gpus` контейнер `stego:cuda` тоже работает — `device=auto` откатится на CPU.
-Веса LF-VSN скачиваются вручную — см. [stego/engines/lfvsn/weights/README.md](stego/engines/lfvsn/weights/README.md).
+Веса скачиваются вручную:
+- LF-VSN — [stego/engines/lfvsn/weights/README.md](stego/engines/lfvsn/weights/README.md)
+- SteganoGAN — [stego/engines/steganogan/weights/README.md](stego/engines/steganogan/weights/README.md)
 
 ## Добавление движка
 

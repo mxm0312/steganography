@@ -1,7 +1,7 @@
 from stego.core.api import capacity, extract, pack
 from stego.core.registry import available
 from stego.core.steganographer import Steganographer
-from stego.core.types import CapacityInfo, Secret
+from stego.core.types import CapacityInfo, ExtractResult, PackResult, Secret
 
 __version__ = "0.1.0"
 __all__ = [
@@ -11,5 +11,7 @@ __all__ = [
     "extract",
     "Secret",
     "CapacityInfo",
+    "PackResult",
+    "ExtractResult",
     "available",
 ]

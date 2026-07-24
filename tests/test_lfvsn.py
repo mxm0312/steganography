@@ -128,6 +128,6 @@ def test_engine_pipeline_end_to_end(tmp_path):
     pack(cover_path, secret_path, stego, method="lfvsn", device="cpu", weights_path=weights)
     assert stego.exists()
 
-    recovered = extract(stego, method="lfvsn", device="cpu", weights_path=weights)
-    assert recovered.media_type.startswith("video/")
-    assert len(recovered.data) > 0
+    result = extract(stego, method="lfvsn", device="cpu", weights_path=weights)
+    assert result.secret.media_type.startswith("video/")
+    assert len(result.secret.data) > 0

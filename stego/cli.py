@@ -62,11 +62,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"Параметры: {info.details}")
         elif args.cmd == "pack":
-            pack(args.container, args.secret, args.output, method=args.method, **params)
+            result = pack(args.container, args.secret, args.output, method=args.method, **params)
             print(f"Готово: {args.output}")
+            print(
+                f"  {_fmt_bytes(result.secret_bytes)} → {_fmt_bytes(result.stego_size_bytes)} "
+                f"· заполнено {result.packing_ratio:.1%} · {result.elapsed_s:.1f}с"
+                + (f" · {result.device}" if result.device else "")
+            )
         elif args.cmd == "extract":
-            secret = extract(args.container, args.output_dir, method=args.method, **params)
-            print(f"Извлечено: {secret.filename} ({_fmt_bytes(secret.size)})")
+            result = extract(args.container, args.output_dir, method=args.method, **params)
+            secret = result.secret
+            dev = f" · {result.device}" if result.device else ""
+            size_s = _fmt_bytes(secret.size)
+            print(f"Извлечено: {secret.filename} ({size_s}) · {result.elapsed_s:.1f}с{dev}")
     except StegoError as e:
         print(f"Ошибка: {e}", file=sys.stderr)
         return 1

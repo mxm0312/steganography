@@ -4,6 +4,61 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class PackResult:
+    """Метрики операции упаковки, возвращаются из Steganographer.pack / api.pack."""
+
+    elapsed_s: float
+    secret_bytes: int
+    stego_size_bytes: int
+    container_size_bytes: int
+    capacity_bytes: int
+    width: int
+    height: int
+    frames: int
+    device: str | None  # "cpu" / "cuda" или None для LSB
+
+    @property
+    def packing_ratio(self) -> float:
+        """Доля заполненной ёмкости контейнера (0..1)."""
+        return self.secret_bytes / self.capacity_bytes if self.capacity_bytes else 0.0
+
+    @property
+    def overhead_ratio(self) -> float:
+        """Относительный прирост размера файла: (stego − контейнер) / контейнер."""
+        return (
+            (self.stego_size_bytes - self.container_size_bytes) / self.container_size_bytes
+            if self.container_size_bytes
+            else 0.0
+        )
+
+    @property
+    def bits_per_pixel(self) -> float:
+        """Бит секрета на пиксель контейнера."""
+        total_pixels = self.width * self.height * max(self.frames, 1)
+        return (self.secret_bytes * 8) / total_pixels if total_pixels else 0.0
+
+    @property
+    def stego_efficiency(self) -> float:
+        """Стеганографическая эффективность: байт секрета / байт stego-файла."""
+        return self.secret_bytes / self.stego_size_bytes if self.stego_size_bytes else 0.0
+
+    @property
+    def throughput_fps(self) -> float:
+        """Скорость обработки, кадров/с."""
+        return self.frames / self.elapsed_s if self.elapsed_s else 0.0
+
+
+@dataclass(frozen=True)
+class ExtractResult:
+    """Результат извлечения секрета + базовые метрики."""
+
+    secret: "Secret"
+    elapsed_s: float
+    stego_size_bytes: int
+    device: str | None
+
+
+@dataclass(frozen=True)
 class Secret:
     """Скрываемые данные + метаданные для восстановления файла."""
 

@@ -126,4 +126,4 @@ def test_real_weights_roundtrip(tmp_path):
     stego = tmp_path / "stego.png"
     pack(cover, secret, stego, method="steganogan", architecture="dense", device="cpu")
     got = extract(stego, method="steganogan", architecture="dense", device="cpu")
-    assert got.data == secret.data and got.filename == "note.txt"
+    assert got.secret.data == secret.data and got.secret.filename == "note.txt"

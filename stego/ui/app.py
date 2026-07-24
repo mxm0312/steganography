@@ -9,6 +9,8 @@ from stego.core.exceptions import CapacityExceeded, PayloadError, StegoError
 
 st.set_page_config(page_title="Стеганография", page_icon="🔏", layout="centered")
 
+_NEURAL_ENGINES = {"lfvsn", "steganogan"}
+
 
 def _fmt(n: int) -> str:
     x = float(n)
@@ -24,7 +26,23 @@ def _save_upload(upload, workdir: Path) -> Path:
     return path
 
 
-# Пояснения к методам (что во что прячет) — чисто UI-слой, ключ = engine.name
+@st.cache_resource
+def _gpu_status() -> dict:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return {
+                "available": True,
+                "name": torch.cuda.get_device_name(0),
+                "count": torch.cuda.device_count(),
+                "vram_gb": torch.cuda.get_device_properties(0).total_memory / 1024**3,
+            }
+        return {"available": False}
+    except ImportError:
+        return {"available": None}  # torch не установлен
+
+
 METHOD_HELP = {
     "lsb": (
         "**Any2Video** — прячет любой файл (байты) в видео. "
@@ -40,7 +58,6 @@ METHOD_HELP = {
     ),
 }
 
-# Настройки загрузчиков и вывода по типу контейнера движка (engine.container_kind)
 _KIND = {
     "video": {
         "pack_label": "Видео-контейнер",
@@ -68,18 +85,29 @@ engines = {e.name: e for e in registry.engines()}
 method = st.selectbox("Метод", list(engines), format_func=lambda n: engines[n].display_name)
 if method in METHOD_HELP:
     st.caption(METHOD_HELP[method])
+
+# GPU-статус — показываем только для нейросетевых движков
+if method in _NEURAL_ENGINES:
+    gpu = _gpu_status()
+    if gpu["available"] is True:
+        vram = f" · {gpu['vram_gb']:.1f} ГБ VRAM" if "vram_gb" in gpu else ""
+        st.success(f"GPU: {gpu['name']}{vram} ({gpu['count']} уст.)", icon="⚡")
+    elif gpu["available"] is False:
+        st.info("GPU не обнаружен — вычисления на CPU", icon="💻")
+    else:
+        st.warning("PyTorch не установлен (`uv sync --extra lfvsn`)", icon="⚠️")
+
 kind = engines[method].container_kind
 cfg = _KIND[kind]
 mode = st.radio("Режим", ["Упаковать секрет", "Извлечь секрет"], horizontal=True)
 
-# Параметры движка — условно по выбранному методу
 params: dict = {}
 if method == "lsb":
     params["bits_per_channel"] = st.slider(
         "Бит на канал", 1, 4, 1, help="Больше бит — выше ёмкость, но заметнее искажения"
     )
 elif method == "lfvsn":
-    params["num_video"] = 1  # устройство определяется автоматически (GPU при наличии, иначе CPU)
+    params["num_video"] = 1
 elif method == "steganogan":
     params["architecture"] = st.selectbox(
         "Архитектура",
@@ -94,10 +122,42 @@ elif method == "steganogan":
 
 
 def _progress_cb(bar, verb: str):
-    """Колбэк для st.progress: обновляет бар по кадрам (видео-движки)."""
     return lambda done, total: bar.progress(
         (done / total) if total else 1.0, text=f"{verb}… {done}/{total} кадров"
     )
+
+
+def _show_pack_metrics(result) -> None:
+    st.divider()
+    st.caption("Метрики упаковки")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Заполнение контейнера", f"{result.packing_ratio:.1%}")
+    c2.metric("Время", f"{result.elapsed_s:.1f} с")
+    c3.metric(
+        "Прирост размера",
+        f"{result.overhead_ratio:+.1%}",
+        help="(stego − оригинал) / оригинал",
+    )
+    with st.expander("Подробнее"):
+        d1, d2 = st.columns(2)
+        d1.metric("Секрет", _fmt(result.secret_bytes))
+        d2.metric("Stego-файл", _fmt(result.stego_size_bytes))
+        d1.metric("Бит на пиксель", f"{result.bits_per_pixel:.4f}")
+        d2.metric("КПД (секрет/stego)", f"{result.stego_efficiency:.1%}")
+        if result.frames > 1:
+            st.metric("Пропускная способность", f"{result.throughput_fps:.1f} кадров/с")
+        if result.device:
+            st.info(f"Устройство инференса: **{result.device.upper()}**")
+
+
+def _show_extract_metrics(result) -> None:
+    st.divider()
+    st.caption("Метрики извлечения")
+    c1, c2 = st.columns(2)
+    c1.metric("Время", f"{result.elapsed_s:.1f} с")
+    c2.metric("Stego-файл", _fmt(result.stego_size_bytes))
+    if result.device:
+        st.info(f"Устройство инференса: **{result.device.upper()}**")
 
 
 workdir = Path(tempfile.mkdtemp(prefix="stego_"))
@@ -150,15 +210,17 @@ if mode == "Упаковать секрет":
         output = workdir / f"{Path(container_up.name).stem}_stego{cfg['suffix']}"
         try:
             if kind == "image":
-                with st.spinner("Упаковка…"):  # один проход сети — прогресс по кадрам не нужен
-                    pack(container, Secret.from_file(secret_path), output, method=method, **params)
+                with st.spinner("Упаковка…"):
+                    result = pack(
+                        container, Secret.from_file(secret_path), output, method=method, **params
+                    )
                 st.success("Готово.")
                 st.caption(
                     "Носитель — **PNG (lossless)**. Не пересохраняйте в JPEG: сжатие убьёт секрет."
                 )
             else:
                 bar = st.progress(0, text="Упаковка…")
-                pack(
+                result = pack(
                     container,
                     Secret.from_file(secret_path),
                     output,
@@ -178,6 +240,7 @@ if mode == "Упаковать секрет":
                 file_name=output.name,
                 mime=cfg["mime"],
             )
+            _show_pack_metrics(result)
         except CapacityExceeded as e:
             st.error(f"Секрет не помещается: {e}")
         except StegoError as e:
@@ -190,13 +253,14 @@ else:
         try:
             if kind == "image":
                 with st.spinner("Извлечение…"):
-                    secret = extract(container, method=method, **params)
+                    result = extract(container, method=method, **params)
             else:
                 bar = st.progress(0, text="Извлечение…")
-                secret = extract(
+                result = extract(
                     container, method=method, progress=_progress_cb(bar, "Извлечение"), **params
                 )
                 bar.empty()
+            secret = result.secret
             st.success(f"Извлечено: **{secret.filename}** ({_fmt(secret.size)})")
             st.download_button(
                 "Скачать секрет",
@@ -204,6 +268,7 @@ else:
                 file_name=secret.filename or "secret.bin",
                 mime=secret.media_type,
             )
+            _show_extract_metrics(result)
         except PayloadError as e:
             st.error(f"В контейнере нет корректной нагрузки: {e}")
         except StegoError as e:

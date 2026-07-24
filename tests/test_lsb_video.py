@@ -36,7 +36,7 @@ def test_pack_extract_roundtrip(sample_video, tmp_path, ext):
     output = tmp_path / f"stego{ext}"
 
     pack(sample_video, secret, output, bits_per_channel=1)
-    recovered = extract(output, bits_per_channel=1)
+    result = extract(output, bits_per_channel=1)
 
-    assert recovered.data == secret.data
-    assert recovered.filename == "msg.txt"
+    assert result.secret.data == secret.data
+    assert result.secret.filename == "msg.txt"
