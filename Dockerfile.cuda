@@ -1,0 +1,30 @@
+# CUDA-вариант образа для GPU-инференса LF-VSN.
+#   docker build -f Dockerfile.cuda -t stego:cuda .
+#   docker run --rm --gpus all -p 8501:8501 \
+#       -v "$PWD/weights:/app/stego/engines/lfvsn/weights" stego:cuda
+# Без --gpus контейнер всё равно запустится и будет считать на CPU (device=auto).
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+# ffmpeg — libav для PyAV; ca-certificates — для скачивания колёс uv
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY stego ./stego
+
+# uv сам подтянет подходящий Python. На Linux x86_64 колесо torch с PyPI уже несёт CUDA-рантайм,
+# так что при запуске с `--gpus all` доступна видеокарта; иначе torch работает на CPU.
+# --frozen: строго версии из uv.lock (нужен обновлённый lock с extra lfvsn).
+RUN uv sync --extra ui --extra lfvsn --frozen
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Веса не бэйкятся в образ (они в .dockerignore) — монтируйте директорию с ними в рантайме:
+#   -v "$PWD/weights:/app/stego/engines/lfvsn/weights"  или через LFVSN_WEIGHTS
+EXPOSE 8501
+ENTRYPOINT ["/entrypoint.sh"]

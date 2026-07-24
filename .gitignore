@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# LF-VSN model weights (large; download manually — see stego/engines/lfvsn/weights/README.md)
+stego/engines/lfvsn/weights/*.pth
+
+# SteganoGAN model weights (download manually — see stego/engines/steganogan/weights/README.md)
+stego/engines/steganogan/weights/*.steg
