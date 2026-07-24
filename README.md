@@ -12,6 +12,11 @@
   прячет **видео/изображение внутрь видео**. Восстановление **приблизительное** (высокий
   PSNR, не байт-в-байт), поэтому payload/crc не используется. Требует PyTorch (extra `lfvsn`)
   и предобученных весов; работает на **GPU и CPU** (параметр `device`). См. ниже.
+- **`steganogan`** — [SteganoGAN](https://github.com/DAI-Lab/SteganoGAN) (MIT 2019): GAN-сеть
+  прячет **произвольные байты внутрь изображения**. Восстановление **приблизительное**
+  (не байт-в-байт). Поддерживает архитектуры `dense` / `basic` / `residual` (параметр
+  `architecture`). Требует PyTorch и предобученных весов; работает на **GPU и CPU**
+  (параметр `device`). Минимальный размер контейнера — ~320×240 пикселей.
 
 ## Структура
 
@@ -36,6 +41,13 @@ stego/
       runner.py            инференс: hide / reveal
       model/               вендоренная сеть (только torch)
       weights/             сюда кладут скачанные .pth (в git не коммитятся)
+    steganogan/            SteganoGAN (нейросеть, изображение-в-изображение)
+      engine.py            SteganoGANEngine (torch — лениво)
+      device.py            выбор устройства (auto/cpu/cuda)
+      weights.py           поиск файла весов
+      runner.py            инференс: encode / decode
+      coding.py            бинаризация payload
+      weights/             скачанные .steg (в git не коммитятся)
   ui/app.py                Streamlit, два режима
   cli.py                   CLI
 tests/
@@ -85,6 +97,10 @@ uv run stego extract out.mkv -o ./recovered
 # LF-VSN (нейросеть): секрет — видео/изображение, --device auto|cpu|cuda
 uv run stego --method lfvsn --device cpu pack cover.mkv secret.mkv -o stego.mkv
 uv run stego --method lfvsn --device cuda extract stego.mkv -o ./recovered
+
+# SteganoGAN (нейросеть): секрет — произвольные байты, контейнер — изображение
+uv run stego --method steganogan --device cuda pack cover.png secret.txt -o stego.png
+uv run stego --method steganogan --device cuda --architecture dense extract stego.png -o ./recovered
 ```
 
 ## UI
@@ -157,4 +173,4 @@ docker run --rm --gpus all \
 2. Импортировать его в `engines/__init__.py` (одна строка).
 
 Движок сразу доступен через `Steganographer("<name>")`, `api`, CLI и UI.
-Видео-IO берётся готовым из `media.video`. Готовые движки: `lsb`, `lfvsn`. На очереди: SteganoGAN.
+Видео-IO берётся готовым из `media.video`. Готовые движки: `lsb`, `lfvsn`, `steganogan`.
